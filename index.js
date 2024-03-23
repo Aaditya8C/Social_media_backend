@@ -20,6 +20,7 @@ const User = mongoose.model("User", {
   userId: String, // MetaMask user ID
   name: String,
   image: String,
+  followers:Number,
 });
 
 // Define schemas
@@ -48,14 +49,20 @@ app.post("/api/users", async (req, res) => {
     const { userId, name, image } = req.body;
 
     const existingUser = await User.findOne({ userId });
+    const totalPosts1 = await Post.countDocuments({ userId });
     if (existingUser) {
-      return res.status(400).json({ error: "User already exists" });
+      return res.status(200).json({
+        data: existingUser,
+        totalPosts: totalPosts1,
+        error: "User already exists",
+      });
     }
 
     const newUser = new User({
       userId,
       name,
       image,
+      followers:Math.floor(Math.random() * 100) + 1
     });
 
     await newUser.save();
@@ -64,13 +71,11 @@ app.post("/api/users", async (req, res) => {
 
     const totalPosts = await Post.countDocuments({ userId });
 
-    res
-      .status(201)
-      .json({
-        data: newUserData,
-        totalPosts: totalPosts,
-        message: "User created successfully",
-      });
+    res.status(201).json({
+      data: newUserData,
+      totalPosts: totalPosts,
+      message: "User created successfully",
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -105,25 +110,33 @@ app.post("/api/posts", async (req, res) => {
 app.get("/api/posts", async (req, res) => {
   try {
     const allPosts = await Post.find().populate("comments");
-    const populatedPosts = await Promise.all(allPosts.map(async post => {
-      const user = await User.findOne({ userId: post.userId });
-      const populatedComments = await Promise.all(post.comments.map(async commentId => {
-        const comment = await Comment.findById(commentId);
-        if (comment) {
-          const commentOwner = await User.findOne({ userId: comment.owner });
-          return {
-            ...comment.toObject(),
-            owner: commentOwner ? { name: commentOwner.name, image: commentOwner.image } : null
-          };
-        }
-        return null;
-      }));
-      return {
-        ...post.toObject(),
-        user: user ? { name: user.name, image: user.image } : null,
-        comments: populatedComments.filter(comment => comment !== null)
-      };
-    }));
+    const populatedPosts = await Promise.all(
+      allPosts.map(async (post) => {
+        const user = await User.findOne({ userId: post.userId });
+        const populatedComments = await Promise.all(
+          post.comments.map(async (commentId) => {
+            const comment = await Comment.findById(commentId);
+            if (comment) {
+              const commentOwner = await User.findOne({
+                userId: comment.owner,
+              });
+              return {
+                ...comment.toObject(),
+                owner: commentOwner
+                  ? { name: commentOwner.name, image: commentOwner.image }
+                  : null,
+              };
+            }
+            return null;
+          })
+        );
+        return {
+          ...post.toObject(),
+          user: user ? { name: user.name, image: user.image } : null,
+          comments: populatedComments.filter((comment) => comment !== null),
+        };
+      })
+    );
     res.status(200).json(populatedPosts);
   } catch (err) {
     console.error(err);
@@ -136,33 +149,39 @@ app.get("/api/posts/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;
     const userPosts = await Post.find({ userId }).populate("comments");
-    const populatedUserPosts = await Promise.all(userPosts.map(async post => {
-      const user = await User.findOne({ userId: post.userId });
-      const populatedComments = await Promise.all(post.comments.map(async commentId => {
-        const comment = await Comment.findById(commentId);
-        if (comment) {
-          const commentOwner = await User.findOne({ userId: comment.owner });
-          return {
-            ...comment.toObject(),
-            owner: commentOwner ? { name: commentOwner.name, image: commentOwner.image } : null
-          };
-        }
-        return null;
-      }));
-      return {
-        ...post.toObject(),
-        user: user ? { name: user.name, image: user.image } : null,
-        comments: populatedComments.filter(comment => comment !== null)
-      };
-    }));
+    const populatedUserPosts = await Promise.all(
+      userPosts.map(async (post) => {
+        const user = await User.findOne({ userId: post.userId });
+        const populatedComments = await Promise.all(
+          post.comments.map(async (commentId) => {
+            const comment = await Comment.findById(commentId);
+            if (comment) {
+              const commentOwner = await User.findOne({
+                userId: comment.owner,
+              });
+              return {
+                ...comment.toObject(),
+                owner: commentOwner
+                  ? { name: commentOwner.name, image: commentOwner.image }
+                  : null,
+              };
+            }
+            return null;
+          })
+        );
+        return {
+          ...post.toObject(),
+          user: user ? { name: user.name, image: user.image } : null,
+          comments: populatedComments.filter((comment) => comment !== null),
+        };
+      })
+    );
     res.status(200).json(populatedUserPosts);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
-
-
 
 // API to add like to a post
 app.post("/api/posts/:postId/like", async (req, res) => {
@@ -213,6 +232,26 @@ app.post("/api/posts/:postId/comment", async (req, res) => {
     });
 
     res.status(201).json(newComment);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/api/users/:userId/total-likes", async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    // Find all posts for the user
+    const userPosts = await Post.find({ userId });
+
+    // Calculate total likes count across all posts
+    let totalLikesCount = 0;
+    userPosts.forEach((post) => {
+      totalLikesCount += post.likes.length;
+    });
+
+    res.status(200).json({ totalLikesCount });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
