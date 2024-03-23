@@ -20,7 +20,7 @@ const User = mongoose.model("User", {
   userId: String, // MetaMask user ID
   name: String,
   image: String,
-  followers:Number,
+  followers: Number,
 });
 
 // Define schemas
@@ -32,6 +32,8 @@ const Post = mongoose.model("Post", {
   likes: [{ type: String }],
   timestamp: { type: Date, default: Date.now },
   comments: [{ type: mongoose.Types.ObjectId, ref: "Comment" }],
+  clicks: Number,
+  url: String,
 });
 
 const Comment = mongoose.model("Comment", {
@@ -62,7 +64,7 @@ app.post("/api/users", async (req, res) => {
       userId,
       name,
       image,
-      followers:Math.floor(Math.random() * 100) + 1
+      followers: Math.floor(Math.random() * 100) + 1,
     });
 
     await newUser.save();
@@ -84,7 +86,7 @@ app.post("/api/users", async (req, res) => {
 
 app.post("/api/posts", async (req, res) => {
   try {
-    const { userId, contentType, content, description } = req.body;
+    const { userId, contentType, content, description, url, clicks } = req.body;
 
     if (!userId || !contentType || !content || !description) {
       res.status(500).json({ error: "Fields are missing!!" });
@@ -96,6 +98,8 @@ app.post("/api/posts", async (req, res) => {
       contentType,
       content,
       description,
+      url,
+      clicks,
     });
 
     await post.save();
@@ -255,6 +259,29 @@ app.get("/api/users/:userId/total-likes", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/api/post/:postId/clicks", async (req, res) => {
+  try {
+    const postId = req.params.postId;
+    const post = await Post.findById(postId);
+    post.clicks++;
+    await post.save();
+    res.status(200).json({ post });
+  } catch (error) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/api/user/:userId", async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const user = await User.findOne({ userId });
+    const totalPosts = await Post.countDocuments({ userId });
+    res.status(200).json({ data: user, totalPosts: totalPosts });
+  } catch (error) {
+    res.status(500).json({ error: error });
   }
 });
 
